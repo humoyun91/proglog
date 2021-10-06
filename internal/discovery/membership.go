@@ -1,6 +1,7 @@
 package discovery
 
 import (
+	"github.com/hashicorp/raft"
 	"github.com/hashicorp/serf/serf"
 	"go.uber.org/zap"
 	"net"
@@ -38,7 +39,6 @@ func (m *Membership) setupSerf() (err error) {
 	if err != nil {
 		return err
 	}
-
 	config := serf.DefaultConfig()
 	config.Init()
 	config.MemberlistConfig.BindAddr = addr.IP.String()
@@ -51,7 +51,6 @@ func (m *Membership) setupSerf() (err error) {
 	if err != nil {
 		return err
 	}
-
 	go m.eventHandler()
 	if m.StartJoinAddrs != nil {
 		_, err = m.serf.Join(m.StartJoinAddrs, true)
@@ -118,7 +117,11 @@ func (m *Membership) Leave() error {
 }
 
 func (m *Membership) logError(err error, msg string, member serf.Member) {
-	m.logger.Error(
+	log := m.logger.Error
+	if err == raft.ErrNotLeader {
+		log = m.logger.Debug
+	}
+	log(
 		msg,
 		zap.Error(err),
 		zap.String("name", member.Name),
