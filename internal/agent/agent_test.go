@@ -17,6 +17,7 @@ import (
 	api "github.com/wcygan/proglog/api/v1"
 	"github.com/wcygan/proglog/internal/agent"
 	"github.com/wcygan/proglog/internal/config"
+	"github.com/wcygan/proglog/internal/loadbalance"
 )
 
 func TestAgent(t *testing.T) {
@@ -92,19 +93,11 @@ func TestAgent(t *testing.T) {
 		},
 	)
 	require.NoError(t, err)
-	consumeResponse, err := leaderClient.Consume(
-		context.Background(),
-		&api.ConsumeRequest{
-			Offset: produceResponse.Offset,
-		},
-	)
-	require.NoError(t, err)
-	require.Equal(t, consumeResponse.Record.Value, []byte("foo"))
 
 	time.Sleep(3 * time.Second)
 
-	followerClient := client(t, agents[1], peerTLSConfig)
-	consumeResponse, err = followerClient.Consume(
+	//START: leader_check
+	consumeResponse, err := leaderClient.Consume( // <label id="produce" />
 		context.Background(),
 		&api.ConsumeRequest{
 			Offset: produceResponse.Offset,
@@ -113,17 +106,15 @@ func TestAgent(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, consumeResponse.Record.Value, []byte("foo"))
 
-	consumeResponse, err = leaderClient.Consume(
+	followerClient := client(t, agents[1], peerTLSConfig)
+	consumeResponse, err = followerClient.Consume( // <label id="follower" />
 		context.Background(),
 		&api.ConsumeRequest{
-			Offset: produceResponse.Offset + 1,
+			Offset: produceResponse.Offset,
 		},
 	)
-	require.Nil(t, consumeResponse)
-	require.Error(t, err)
-	got := grpc.Code(err)
-	want := grpc.Code(api.ErrOffsetOutOfRange{}.GRPCStatus().Err())
-	require.Equal(t, got, want)
+	require.NoError(t, err)
+	require.Equal(t, consumeResponse.Record.Value, []byte("foo"))
 }
 
 func client(
@@ -136,7 +127,8 @@ func client(
 	rpcAddr, err := agent.Config.RPCAddr()
 	require.NoError(t, err)
 	conn, err := grpc.Dial(fmt.Sprintf(
-		"%s",
+		"%s:///%s",
+		loadbalance.Name,
 		rpcAddr,
 	), opts...)
 	require.NoError(t, err)
