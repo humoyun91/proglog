@@ -32,12 +32,14 @@ func TestResolver(t *testing.T) {
 	serverCreds := credentials.NewTLS(tlsConfig)
 
 	srv, err := server.NewGRPCServer(&server.Config{
-		GetServerer: &getServers{},
+		GetServerer: &getServers{}, //<label id="get_servers_mock"/>
 	}, grpc.Creds(serverCreds))
 	require.NoError(t, err)
 
 	go srv.Serve(l)
+	// END: setup_test
 
+	// START: mid_test
 	conn := &clientConn{}
 	tlsConfig, err = config.SetupTLSConfig(config.TLSConfig{
 		CertFile:      config.RootClientCertFile,
@@ -60,7 +62,9 @@ func TestResolver(t *testing.T) {
 		opts,
 	)
 	require.NoError(t, err)
+	// END: mid_test
 
+	// START: finish_test
 	wantState := resolver.State{
 		Addresses: []resolver.Address{{
 			Addr:       "localhost:9001",
@@ -77,6 +81,9 @@ func TestResolver(t *testing.T) {
 	require.Equal(t, wantState, conn.state)
 }
 
+// END: finish_test
+
+// START: mock_deps
 type getServers struct{}
 
 func (s *getServers) GetServers() ([]*api.Server, error) {
@@ -95,8 +102,9 @@ type clientConn struct {
 	state resolver.State
 }
 
-func (c *clientConn) UpdateState(state resolver.State) {
+func (c *clientConn) UpdateState(state resolver.State) error {
 	c.state = state
+	return nil
 }
 
 func (c *clientConn) ReportError(err error) {}
